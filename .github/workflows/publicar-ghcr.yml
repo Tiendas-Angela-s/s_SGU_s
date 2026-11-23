@@ -1,0 +1,55 @@
+# Publicación verificable: etiqueta v1.0.0 o ejecución manual desde GitHub Actions.
+name: Publicar SGU en GitHub Container Registry
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: write
+jobs:
+  build-test-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Obtener código
+        uses: actions/checkout@v4
+      - name: Habilitar Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Iniciar sesión en GHCR con GITHUB_TOKEN
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Definir etiqueta y nombre de imagen
+        id: meta
+        shell: bash
+        run: |
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}/sgu-matricula-api"
+          TAG="${GITHUB_REF_NAME}"
+          if [[ "$GITHUB_REF_TYPE" != "tag" ]]; then TAG="sha-${GITHUB_SHA::12}"; fi
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+      - name: Construir, ejecutar pruebas unitarias y publicar
+        id: publish
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}
+          provenance: true
+      - name: Escanear vulnerabilidades de la imagen publicada
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: ${{ steps.meta.outputs.image }}@${{ steps.publish.outputs.digest }}
+          format: table
+          severity: HIGH,CRITICAL
+          exit-code: '0'
+      - name: Registrar URL, tag y digest reales
+        run: |
+          echo "## Publicación GHCR" >> "$GITHUB_STEP_SUMMARY"
+          echo "Imagen: \`${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Digest: \`${{ steps.publish.outputs.digest }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Revisar el resultado del escaneo Trivy antes de considerar segura la imagen." >> "$GITHUB_STEP_SUMMARY"
