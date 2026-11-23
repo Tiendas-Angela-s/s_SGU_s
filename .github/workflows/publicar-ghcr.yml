@@ -41,7 +41,7 @@ jobs:
           tags: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}
           provenance: true
       - name: Escanear vulnerabilidades de la imagen publicada
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@0.36.0
         with:
           image-ref: ${{ steps.meta.outputs.image }}@${{ steps.publish.outputs.digest }}
           format: table
